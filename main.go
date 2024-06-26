@@ -46,23 +46,27 @@ func (t Tile) Y() float32 {
 }
 
 type Game struct {
-	snake                []Tile // first element is head
-	headColor, bodyColor color.RGBA
-	deadColor            color.RGBA
-	food                 []Tile
-	foodColor            color.RGBA
-	occupiedTiles        map[Tile]bool // manages occupied state of each tile
-	direction            Tile          // (1,0) right (-1,0) left (0,-1) up (0,1) down
-	updateTick           int           // keep  track of current tick
-	speed                int
-	wallTiles            []Tile
-	wallColor            color.RGBA
-	isPlaying            bool
-	score                int64 // to keep track of score
-	scoreFontFace        font.Face
-	scoreTextColor       color.RGBA
-	scoreText            string
-	scorePosition        Tile
+	snake                                []Tile // first element is head
+	headColor, bodyColor                 color.RGBA
+	deadColor                            color.RGBA
+	food                                 []Tile
+	foodColor                            color.RGBA
+	occupiedTiles                        map[Tile]bool // manages occupied state of each tile
+	direction                            Tile          // (1,0) right (-1,0) left (0,-1) up (0,1) down
+	updateTick                           int           // keep  track of current tick
+	speed                                int
+	wallTiles                            []Tile
+	wallColor                            color.RGBA
+	isPlaying                            bool
+	score                                int64 // to keep track of score
+	scoreFontFace                        font.Face
+	scoreTextColor                       color.RGBA
+	scoreText                            string
+	scorePosition                        Tile
+	gameOverFontFace, continueFontFace   font.Face
+	gameOverTextColor, continueTextColor color.RGBA
+	gameOverText, continueText           string
+	gameOverPosition, continuePosition   Tile
 }
 
 func (g *Game) Update() error {
@@ -250,23 +254,28 @@ func initGame() *Game {
 	}
 
 	g := &Game{
-		snake:          snake,                      // head, body, body
-		bodyColor:      color.RGBA{0, 135, 0, 255}, // Dark green
-		headColor:      color.RGBA{0, 255, 0, 255}, // Bright green
-		foodColor:      color.RGBA{200, 0, 0, 255}, // Red
-		occupiedTiles:  occupiedTiles,
-		direction:      Tile{1, 0},
-		speed:          5,
-		wallTiles:      wallTiles,
-		wallColor:      color.RGBA{105, 105, 105, 255},
-		isPlaying:      true,
-		deadColor:      color.RGBA{150, 25, 75, 255},
-		scoreTextColor: color.RGBA{255, 255, 255, 255}, // White
+		snake:             snake,                      // head, body, body
+		bodyColor:         color.RGBA{0, 135, 0, 255}, // Dark green
+		headColor:         color.RGBA{0, 255, 0, 255}, // Bright green
+		foodColor:         color.RGBA{200, 0, 0, 255}, // Red
+		occupiedTiles:     occupiedTiles,
+		direction:         Tile{1, 0},
+		speed:             5,
+		wallTiles:         wallTiles,
+		wallColor:         color.RGBA{105, 105, 105, 255},
+		isPlaying:         true,
+		deadColor:         color.RGBA{150, 25, 75, 255},
+		scoreTextColor:    color.RGBA{255, 255, 255, 255}, // White
+		gameOverTextColor: color.RGBA{255, 255, 255, 255},
+		continueTextColor: color.RGBA{255, 255, 255, 255},
+		gameOverText:      "Game Over",
+		continueText:      "press spacebar to continue",
 	}
 
 	g.spawnFood()
 
 	// parse font to use
+	dpi := 80.00
 	pixelFont, err := opentype.Parse(fonts.PressStart2P_ttf)
 	if err != nil {
 		log.Panicln(err)
@@ -275,7 +284,7 @@ func initGame() *Game {
 	// create facce based on the font and the line height we want by pixels
 	g.scoreFontFace, err = opentype.NewFace(pixelFont, &opentype.FaceOptions{
 		Size:    tileSize,
-		DPI:     80,
+		DPI:     dpi,
 		Hinting: font.HintingVertical,
 	})
 	if err != nil {
@@ -283,6 +292,17 @@ func initGame() *Game {
 	}
 	g.scoreFontFace = text.FaceWithLineHeight(g.scoreFontFace, float64(tileSize))
 	g.updateScore(0)
+
+	// prepare font face for end game
+	gameOverFontSize := tileSize * 2
+	g.gameOverFontFace, _ = opentype.NewFace(pixelFont, &opentype.FaceOptions{
+		Size:    float64(gameOverFontSize),
+		DPI:     dpi,
+		Hinting: font.HintingVertical,
+	})
+	g.gameOverFontFace = text.FaceWithLineHeight(g.gameOverFontFace, float64(gameOverFontSize))
+	continueFontSize := tileSize
+	g.continueFontFace =
 
 	return g
 }
