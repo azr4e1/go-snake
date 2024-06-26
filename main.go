@@ -66,16 +66,16 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
-	if !g.isPlaying {
-		return nil
-	}
-
 	tps := ebiten.TPS() // get ticks per second
 	g.updateTick++      //  track every tick
 	// Detect space pressed
 	switch {
 	case ebiten.IsKeyPressed(ebiten.KeyQ) && inpututil.IsKeyJustPressed(ebiten.KeyQ):
 		os.Exit(0)
+	}
+
+	if !g.isPlaying {
+		return nil
 	}
 
 	// determine snake direction
