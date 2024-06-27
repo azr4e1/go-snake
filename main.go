@@ -46,39 +46,102 @@ func (t Tile) Y() float32 {
 }
 
 type Game struct {
-	snake                                []Tile // first element is head
-	headColor, bodyColor                 color.RGBA
-	deadColor                            color.RGBA
-	food                                 []Tile
-	foodColor                            color.RGBA
-	occupiedTiles                        map[Tile]bool // manages occupied state of each tile
-	direction                            Tile          // (1,0) right (-1,0) left (0,-1) up (0,1) down
-	updateTick                           int           // keep  track of current tick
-	speed                                int
-	wallTiles                            []Tile
-	wallColor                            color.RGBA
-	isPlaying                            bool
-	score                                int64 // to keep track of score
-	scoreFontFace                        font.Face
-	scoreTextColor                       color.RGBA
-	scoreText                            string
-	scorePosition                        Tile
-	gameOverFontFace, continueFontFace   font.Face
-	gameOverTextColor, continueTextColor color.RGBA
-	gameOverText, continueText           string
-	gameOverPosition, continuePosition   Tile
+	snake                                              []Tile // first element is head
+	headColor, bodyColor                               color.RGBA
+	deadColor                                          color.RGBA
+	food                                               []Tile
+	foodColor                                          color.RGBA
+	occupiedTiles                                      map[Tile]bool // manages occupied state of each tile
+	direction                                          Tile          // (1,0) right (-1,0) left (0,-1) up (0,1) down
+	updateTick                                         int           // keep  track of current tick
+	speed                                              int
+	wallTiles                                          []Tile
+	wallColor                                          color.RGBA
+	isPlaying                                          bool
+	score, highScore                                   int64 // to keep track of score
+	scoreFontFace                                      font.Face
+	scoreTextColor                                     color.RGBA
+	scoreText                                          string
+	scorePosition                                      Tile
+	gameOverFontFace, continueFontFace                 font.Face
+	gameOverTextColor, continueTextColor               color.RGBA
+	gameOverText, continueText                         string
+	gameOverPosition, continuePosition                 Tile
+	isHomeScreen                                       bool
+	titleFontFace, highScoreFontFace, startFontFace    font.Face
+	titleTextColor, highScoreTextColor, startTextColor color.RGBA
+	titleText, highScoreText, startText                string
+	titlePosition, highScorePosition, startPosition    Tile
+	isPaused                                           bool
+}
+
+func (g *Game) reset() {
+	var wallTiles = []Tile{}
+	occupiedTiles := make(map[Tile]bool)
+	for i := 0; i < horizontalTiles; i++ {
+		wallTileTop, wallTileBottom := Tile{i, 2}, Tile{i, verticalTiles - 1}
+		wallTiles = append(wallTiles, wallTileTop, wallTileBottom)
+		occupiedTiles[wallTileBottom] = true
+		occupiedTiles[wallTileTop] = true
+	}
+	for i := 2; i < verticalTiles; i++ {
+		wallTileLeft, wallTileRight := Tile{0, i}, Tile{horizontalTiles - 1, i}
+		wallTiles = append(wallTiles, wallTileLeft, wallTileRight)
+		occupiedTiles[wallTileRight] = true
+		occupiedTiles[wallTileLeft] = true
+	}
+	snake := []Tile{{3, 3}, {2, 3}, {1, 3}}
+	for _, t := range snake {
+		occupiedTiles[t] = true
+	}
+
+	g.snake = snake
+	g.occupiedTiles = occupiedTiles
+	g.speed = 5
+	g.wallTiles = wallTiles
+	g.isPlaying = true
+	g.food = []Tile{}
+	g.direction = dirRight
+
+	g.spawnFood()
+	g.updateScore(0)
 }
 
 func (g *Game) Update() error {
 	tps := ebiten.TPS() // get ticks per second
-	g.updateTick++      //  track every tick
+
+	if !g.isPaused {
+		g.updateTick++ //  track every tick
+	}
 	// Detect space pressed
 	switch {
 	case ebiten.IsKeyPressed(ebiten.KeyQ) && inpututil.IsKeyJustPressed(ebiten.KeyQ):
 		os.Exit(0)
 	}
 
+	if g.isHomeScreen {
+		switch {
+		case ebiten.IsKeyPressed(ebiten.KeySpace) && inpututil.IsKeyJustPressed(ebiten.KeySpace):
+			g.reset()
+			g.isHomeScreen = false
+			return nil
+		}
+	}
+
 	if !g.isPlaying {
+		switch {
+		case ebiten.IsKeyPressed(ebiten.KeySpace) && inpututil.IsKeyJustPressed(ebiten.KeySpace):
+			g.reset()
+			g.isHomeScreen = true
+			return nil
+		}
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeySpace) && inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		g.isPaused = !g.isPaused
+	}
+
+	if g.isPaused {
 		return nil
 	}
 
@@ -174,6 +237,18 @@ func (g *Game) updateScore(score int64) {
 
 	g.scorePosition.y = tileSize * 1.5
 	g.scorePosition.x = (screenWidth - bounds.Max.X.Round()) / 2
+
+	// attempt to update high score
+	if g.score >= g.highScore {
+		g.highScore = g.score
+		g.highScoreText = fmt.Sprintf("high score: %d", g.highScore)
+
+		// determine text size
+		bounds, _ = font.BoundString(g.highScoreFontFace, g.highScoreText)
+
+		// determine horizontal center position
+		g.highScorePosition.x = (screenWidth - bounds.Max.X.Round()) / 2
+	}
 }
 
 func (g *Game) increaseSpeed(n, maxSpeed int) {
@@ -191,6 +266,17 @@ func (g *Game) decreaseSpeed(n, minSpeed int) {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	if g.isHomeScreen {
+		text.Draw(screen, g.titleText, g.titleFontFace, g.titlePosition.x, g.titlePosition.y, g.scoreTextColor)
+		// Draw the high score
+		text.Draw(screen, g.highScoreText, g.highScoreFontFace, g.highScorePosition.x, g.highScorePosition.y, g.highScoreTextColor)
+
+		// Draw the start text
+		text.Draw(screen, g.startText, g.startFontFace, g.startPosition.x, g.startPosition.y, g.startTextColor)
+
+		return
+	}
+
 	// Draw walls
 	for _, wallTile := range g.wallTiles {
 		vector.DrawFilledRect(screen, wallTile.X(), wallTile.Y(), tileSize, tileSize, g.wallColor, antiAlias)
@@ -218,6 +304,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	// Draw High score
 	text.Draw(screen, g.scoreText, g.scoreFontFace, g.scorePosition.x, g.scorePosition.y, g.scoreTextColor)
+
+	// if game is over, draw end game text
+	if !g.isPlaying {
+		text.Draw(screen, g.gameOverText, g.gameOverFontFace, g.gameOverPosition.x, g.gameOverPosition.y, g.gameOverTextColor)
+		text.Draw(screen, g.continueText, g.continueFontFace, g.continuePosition.x, g.continuePosition.y, g.continueTextColor)
+	}
+
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -254,22 +347,28 @@ func initGame() *Game {
 	}
 
 	g := &Game{
-		snake:             snake,                      // head, body, body
-		bodyColor:         color.RGBA{0, 135, 0, 255}, // Dark green
-		headColor:         color.RGBA{0, 255, 0, 255}, // Bright green
-		foodColor:         color.RGBA{200, 0, 0, 255}, // Red
-		occupiedTiles:     occupiedTiles,
-		direction:         Tile{1, 0},
-		speed:             5,
-		wallTiles:         wallTiles,
-		wallColor:         color.RGBA{105, 105, 105, 255},
-		isPlaying:         true,
-		deadColor:         color.RGBA{150, 25, 75, 255},
-		scoreTextColor:    color.RGBA{255, 255, 255, 255}, // White
-		gameOverTextColor: color.RGBA{255, 255, 255, 255},
-		continueTextColor: color.RGBA{255, 255, 255, 255},
-		gameOverText:      "Game Over",
-		continueText:      "press spacebar to continue",
+		snake:              snake,                      // head, body, body
+		bodyColor:          color.RGBA{0, 135, 0, 255}, // Dark green
+		headColor:          color.RGBA{0, 255, 0, 255}, // Bright green
+		foodColor:          color.RGBA{200, 0, 0, 255}, // Red
+		occupiedTiles:      occupiedTiles,
+		direction:          Tile{1, 0},
+		speed:              5,
+		wallTiles:          wallTiles,
+		wallColor:          color.RGBA{105, 105, 105, 255},
+		isPlaying:          false,
+		deadColor:          color.RGBA{150, 25, 75, 255},
+		scoreTextColor:     color.RGBA{255, 255, 255, 255}, // White
+		gameOverTextColor:  color.RGBA{255, 255, 255, 255},
+		continueTextColor:  color.RGBA{255, 255, 255, 255},
+		gameOverText:       "Game Over",
+		continueText:       "press spacebar to continue",
+		titleTextColor:     color.RGBA{255, 255, 255, 255},
+		titleText:          "Snake Game",
+		isHomeScreen:       true,
+		highScoreTextColor: color.RGBA{255, 255, 255, 255},
+		startTextColor:     color.RGBA{255, 255, 255, 255},
+		startText:          "press spacebar to start",
 	}
 
 	g.spawnFood()
@@ -291,7 +390,6 @@ func initGame() *Game {
 		log.Panicln(err)
 	}
 	g.scoreFontFace = text.FaceWithLineHeight(g.scoreFontFace, float64(tileSize))
-	g.updateScore(0)
 
 	// prepare font face for end game
 	gameOverFontSize := tileSize * 2
@@ -302,7 +400,49 @@ func initGame() *Game {
 	})
 	g.gameOverFontFace = text.FaceWithLineHeight(g.gameOverFontFace, float64(gameOverFontSize))
 	continueFontSize := tileSize
-	g.continueFontFace =
+	g.continueFontFace = g.scoreFontFace
+
+	// determine text size
+	gameOverBounds, _ := font.BoundString(g.gameOverFontFace, g.gameOverText)
+	continueBounds, _ := font.BoundString(g.continueFontFace, g.continueText)
+
+	// determine centralized positions (focus on biggest encapsulating box)
+	endGameBoxBaseHeight := (screenHeight - gameOverBounds.Max.Y.Round() - continueBounds.Max.Y.Round()) / 2
+	g.gameOverPosition.y = endGameBoxBaseHeight
+	g.gameOverPosition.x = (screenWidth - gameOverBounds.Max.X.Round()) / 2
+	g.continuePosition.y = endGameBoxBaseHeight + continueFontSize
+	g.continuePosition.x = (screenWidth - continueBounds.Max.X.Round()) / 2
+
+	titleFontSize := tileSize * 2
+	g.titleFontFace, _ = opentype.NewFace(pixelFont, &opentype.FaceOptions{
+		Size:    float64(titleFontSize),
+		DPI:     dpi,
+		Hinting: font.HintingVertical,
+	})
+	g.titleFontFace = text.FaceWithLineHeight(g.titleFontFace, float64(titleFontSize))
+
+	titleBounds, _ := font.BoundString(g.titleFontFace, g.titleText)
+
+	g.titlePosition.y = titleFontSize + tileSize
+	g.titlePosition.x = (screenWidth - titleBounds.Max.X.Round()) / 2
+	useFontSize := tileSize
+	g.highScoreFontFace, _ = opentype.NewFace(pixelFont, &opentype.FaceOptions{
+		Size:    float64(useFontSize),
+		DPI:     dpi,
+		Hinting: font.HintingVertical,
+	})
+	g.highScoreFontFace = text.FaceWithLineHeight(g.highScoreFontFace, float64(useFontSize))
+	g.startFontFace = g.highScoreFontFace
+
+	// determine text size
+	startBounds, _ := font.BoundString(g.startFontFace, g.startText)
+
+	// determine centralized positions below title
+	g.highScorePosition.y = g.titlePosition.y + tileSize + useFontSize   // put 1 tile below title
+	g.startPosition.y = g.highScorePosition.y + tileSize*3 + useFontSize // put 3 tiles below high score
+	g.startPosition.x = (screenWidth - startBounds.Max.X.Round()) / 2
+
+	g.updateScore(0)
 
 	return g
 }
